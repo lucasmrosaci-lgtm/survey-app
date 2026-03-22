@@ -13,7 +13,12 @@ export function AuthProvider({ children }) {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         try {
-          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+          // Promise.race para evitar que Firebase bloquee el inicio de sesión si Firestore está fuera de línea
+          const docRef = doc(db, 'users', firebaseUser.uid);
+          const docPromise = getDoc(docRef);
+          const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout Firestore')), 5000));
+          const userDoc = await Promise.race([docPromise, timeoutPromise]);
+
           if (userDoc.exists()) {
              setUser({ ...firebaseUser, role: userDoc.data().role, username: userDoc.data().name || firebaseUser.email });
           } else {
@@ -22,8 +27,10 @@ export function AuthProvider({ children }) {
              setUser({ ...firebaseUser, role: defaultRole, username: firebaseUser.email });
           }
         } catch (e) {
-             console.error("Error fetching user role", e);
-             setUser({ ...firebaseUser, role: 'worker', username: firebaseUser.email });
+             console.error("Error fetching user role:", e.message);
+             // Si falla el timeout o hay un error, usamos la regla de prototipo igual que arriba
+             const defaultRole = firebaseUser.email.toLowerCase().includes('admin') ? 'admin' : 'worker';
+             setUser({ ...firebaseUser, role: defaultRole, username: firebaseUser.email });
         }
       } else {
         setUser(null);
