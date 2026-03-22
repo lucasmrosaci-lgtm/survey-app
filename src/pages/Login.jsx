@@ -13,11 +13,11 @@ export default function Login() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (user && !isLoading) {
+    if (user) {
       if (user.role === 'admin') navigate('/admin');
       else navigate('/');
     }
-  }, [user, navigate, isLoading]);
+  }, [user, navigate]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -27,8 +27,8 @@ export default function Login() {
     setError('');
     try {
        await login(email, password);
-       // El useEffect anterior interceptará cuando el AuthContext termine de cargar el usuario oficial.
-       setIsLoading(false);
+       // Mantenemos el isLoading activo. El useEffect de arriba redirigirá 
+       // una vez que el AuthContext termine de obtener el rol del usuario asíncronamente.
     } catch (err) {
        console.error(err);
        setError('Credenciales incorrectas o usuario no encontrado.');
