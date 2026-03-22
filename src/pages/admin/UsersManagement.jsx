@@ -76,12 +76,12 @@ export default function UsersManagement() {
   };
 
   return (
-    <div style={{ padding: '2rem' }}>
-      <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '2rem' }}>
+    <div style={{ padding: '0' }}>
+      <h2 className="admin-page-title" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '2rem' }}>
         <Users color="var(--primary-color)" /> Gestión de Usuarios
       </h2>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 1fr) 2fr', gap: '2rem' }}>
+      <div className="users-grid">
         
         {/* CREATE USER FORM */}
         <div style={{ background: 'white', padding: '1.5rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)', height: 'fit-content' }}>
@@ -131,7 +131,7 @@ export default function UsersManagement() {
            {loading ? (
               <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem', color: 'var(--primary-color)' }}><Loader className="animate-spin" /></div>
            ) : (
-             <div style={{ overflowX: 'auto' }}>
+             <div className="table-responsive">
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
                    <thead>
                       <tr style={{ borderBottom: '2px solid #e2e8f0', textAlign: 'left', color: 'var(--text-light)' }}>

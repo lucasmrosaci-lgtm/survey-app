@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { getSyncedSurveys } from '../../services/db';
-import { LogOut, Download, Map as MapIcon, Image as ImageIcon, Users, ClipboardList, Activity } from 'lucide-react';
+import { LogOut, Download, Map as MapIcon, Image as ImageIcon, Users, ClipboardList, Activity, Menu } from 'lucide-react';
 import UsersManagement from './UsersManagement';
 
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('surveys');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [surveys, setSurveys] = useState([]);
   const [selectedPhoto, setSelectedPhoto] = useState(null);
   
@@ -64,9 +65,12 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div style={{ display: 'flex', display: 'flex', height: '100vh', backgroundColor: 'var(--bg-color)', overflow: 'hidden' }}>
+    <div className="admin-layout">
+      {/* Sidebar Overlay for Mobile */}
+      <div className={`admin-overlay ${isSidebarOpen ? 'open' : ''}`} onClick={() => setIsSidebarOpen(false)}></div>
+
       {/* Sidebar */}
-      <aside style={{ width: '320px', backgroundColor: 'white', borderRight: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column' }}>
+      <aside className={`admin-sidebar ${isSidebarOpen ? 'open' : 'collapsed'}`}>
         <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-color)' }}>
           <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'var(--primary-color)' }}>Admin Panel</h2>
           <p style={{ fontSize: '0.875rem', color: 'var(--text-light)' }}>Gestión de Relevamientos</p>
@@ -92,14 +96,24 @@ export default function AdminDashboard() {
       </aside>
 
       {/* Main Content */}
-      <div style={{ flex: 1, backgroundColor: '#f1f5f9', overflowY: 'auto' }}>
-        {activeTab === 'users' ? (
-           <UsersManagement />
-        ) : (
-           <div style={{ padding: '2rem' }}>
-             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-               <h1 style={{ fontSize: '1.875rem', fontWeight: 'bold', margin: 0, color: 'var(--text-dark)' }}>Relevamientos Recibidos</h1>
-               <button onClick={exportCSV} style={{ padding: '0.75rem 1.5rem', background: 'var(--success-color)', color: 'white', borderRadius: 'var(--radius-md)', border: 'none', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: 'var(--shadow-sm)' }}>
+      <div className="admin-content-wrapper">
+        
+        {/* Toggle Headbar */}
+        <div style={{ background: 'white', padding: '1rem 2rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '1rem', minHeight: '4.5rem' }}>
+          <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} style={{ background: '#f1f5f9', border: 'none', cursor: 'pointer', color: 'var(--primary-color)', padding: '0.5rem', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Colapsar menú">
+             <Menu size={24} />
+          </button>
+          <span style={{ fontWeight: '500', color: 'var(--text-light)', fontSize: '0.875rem' }}>{activeTab === 'surveys' ? 'Relevamientos / Vista General' : 'Usuarios / Gestión de Permisos'}</span>
+        </div>
+
+        <div className="admin-pad">
+          {activeTab === 'users' ? (
+             <UsersManagement />
+          ) : (
+             <div>
+               <div className="admin-header-flex">
+                 <h1 className="admin-page-title">Relevamientos Recibidos</h1>
+                 <button onClick={exportCSV} style={{ padding: '0.75rem 1.5rem', background: 'var(--success-color)', color: 'white', borderRadius: 'var(--radius-md)', border: 'none', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: 'var(--shadow-sm)' }}>
                  <Download size={20} /> Exportar Data (CSV)
                </button>
              </div>
@@ -110,7 +124,7 @@ export default function AdminDashboard() {
                   <h3 style={{ fontSize: '1rem', fontWeight: 'bold', color: 'var(--text-light)', marginBottom: '1rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                      <Activity size={18} /> Resumen de Actividad
                   </h3>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
+                  <div className="admin-widgets-grid">
                     {activitySummary.map(([name, count]) => (
                       <div key={name} style={{ background: 'white', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '0.5rem', boxShadow: 'var(--shadow-sm)' }}>
                          <span style={{ fontSize: '0.875rem', color: 'var(--text-light)', fontWeight: '600', textTransform: 'uppercase' }}>{name}</span>
@@ -121,7 +135,7 @@ export default function AdminDashboard() {
                </div>
              )}
 
-             <div style={{ background: 'var(--surface-color)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-md)', overflow: 'hidden' }}>
+             <div className="table-responsive" style={{ background: 'var(--surface-color)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-md)' }}>
                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
               <tr style={{ background: '#f8fafc', borderBottom: '2px solid var(--border-color)' }}>
@@ -166,6 +180,7 @@ export default function AdminDashboard() {
          </div>
         </div>
       )}
+      </div>
       </div>
 
       {/* Photo Modal */}

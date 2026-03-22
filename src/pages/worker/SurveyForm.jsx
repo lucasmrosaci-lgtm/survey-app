@@ -17,7 +17,9 @@ export default function SurveyForm() {
     storeName: '',
     category: '',
     notes: '',
-    photoPath: null
+    photoPath: null,
+    launches: '',
+    launchesPhotos: []
   });
   
   const [stores, setStores] = useState([]);
@@ -56,7 +58,9 @@ export default function SurveyForm() {
                storeName: survey.storeName || '',
                category: survey.category || '',
                notes: survey.notes || '',
-               photoPath: survey.photoPath || null
+               photoPath: survey.photoPath || null,
+               launches: survey.launches || '',
+               launchesPhotos: survey.launchesPhotos || []
             });
             setBrandData(survey.brands || {});
             const loadedActiveBrands = Object.keys(survey.brands || {});
@@ -237,23 +241,35 @@ export default function SurveyForm() {
              </h3>
              <button type="button" onClick={() => setFilters({name: '', province: '', address: '', locality: '', type: '', cluster: ''})} style={{ fontSize: '0.75rem', color: 'var(--primary-color)', background: 'none', border: 'none', cursor: 'pointer' }}>Limpiar Filtros</button>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-            <select name="province" value={filters.province} onChange={handleFilterChange} style={filterStyle}>
-              <option value="">Provincia...</option>
-              {getUnique('province').map(x => <option key={x} value={x}>{x}</option>)}
-            </select>
-            <select name="locality" value={filters.locality} onChange={handleFilterChange} style={filterStyle}>
-              <option value="">Localidad...</option>
-              {getUnique('locality').map(x => <option key={x} value={x}>{x}</option>)}
-            </select>
-            <select name="type" value={filters.type} onChange={handleFilterChange} style={filterStyle}>
-              <option value="">Tipo...</option>
-              {getUnique('type').map(x => <option key={x} value={x}>{x}</option>)}
-            </select>
-            <select name="cluster" value={filters.cluster} onChange={handleFilterChange} style={filterStyle}>
-              <option value="">Cluster...</option>
-              {getUnique('cluster').map(x => <option key={x} value={x}>{x}</option>)}
-            </select>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-light)', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Provincia</label>
+              <select name="province" value={filters.province} onChange={handleFilterChange} style={filterStyle}>
+                <option value="">Todas</option>
+                {getUnique('province').map(x => <option key={x} value={x}>{x}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-light)', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Localidad</label>
+              <select name="locality" value={filters.locality} onChange={handleFilterChange} style={filterStyle}>
+                <option value="">Todas</option>
+                {getUnique('locality').map(x => <option key={x} value={x}>{x}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-light)', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Tipo</label>
+              <select name="type" value={filters.type} onChange={handleFilterChange} style={filterStyle}>
+                <option value="">Todos</option>
+                {getUnique('type').map(x => <option key={x} value={x}>{x}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-light)', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Cluster</label>
+              <select name="cluster" value={filters.cluster} onChange={handleFilterChange} style={filterStyle}>
+                <option value="">Todos</option>
+                {getUnique('cluster').map(x => <option key={x} value={x}>{x}</option>)}
+              </select>
+            </div>
           </div>
         </div>
 
@@ -426,36 +442,46 @@ export default function SurveyForm() {
                         ))}
                      </div>
                      
-                     {/* BRAND LEVEL LANZAMIENTOS Y COSECHA */}
+                     {/* BRAND LEVEL COSECHA */}
                      <div style={{ marginTop: '1.5rem', background: '#eff6ff', padding: '1.25rem', borderRadius: 'var(--radius-md)', border: '1px solid #bfdbfe' }}>
-                        <div style={{ marginBottom: '1.25rem' }}>
+                        <div style={{ marginBottom: '0.25rem' }}>
                            <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--primary-color)' }}>COSECHA</label>
                            <input type="text" placeholder="Ej. 2023, 2024..." value={brandData[brand.name]?.cosecha || ''} onChange={(e) => updateBrand(brand.name, 'cosecha', e.target.value)} style={{ width: '100%', padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid #bfdbfe' }} />
-                        </div>
-                        
-                        <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--primary-color)' }}>LANZAMIENTOS</label>
-                        <textarea placeholder="Detalle general de nuevos productos o lanzamientos a nivel marca..." rows={2} value={brandData[brand.name]?.launches || ''} onChange={(e) => updateBrand(brand.name, 'launches', e.target.value)} style={{ width: '100%', padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid #bfdbfe', resize: 'vertical' }} />
-                        <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                           {(brandData[brand.name]?.launchesPhotos || []).map((p, i) => (
-                              <div key={`bl-${i}`} style={{ position: 'relative', width: '60px', height: '60px' }}>
-                                 <img src={p} alt="Lanzamiento" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '4px', border: '1px solid #bfdbfe' }}/>
-                                 <button type="button" onClick={() => removeBrandPhoto(brand.name, 'launchesPhotos', i)} style={{ position: 'absolute', top: -5, right: -5, background: 'red', color: 'white', border: 'none', borderRadius: '50%', width: '20px', height: '20px', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>X</button>
-                              </div>
-                           ))}
-                           <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '60px', height: '60px', border: '1px dashed #60a5fa', borderRadius: '4px', cursor: 'pointer', background: 'white' }}>
-                              <Plus size={20} color="#60a5fa" />
-                              <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={(e) => {
-                                 const f = e.target.files[0];
-                                 if(f) { const r = new FileReader(); r.onloadend=()=>addBrandPhoto(brand.name, 'launchesPhotos', r.result); r.readAsDataURL(f); }
-                                 e.target.value = null; // reset input
-                              }}/>
-                           </label>
                         </div>
                      </div>
                         </>
                      )}
                   </div>
                )})}
+            </div>
+            
+            {/* GLOBAL LANZAMIENTOS FOR THE STORE SEEN DURING BRANDING */}
+            <div style={{ marginTop: '1.5rem', background: '#e0e7ff', padding: '1.25rem', borderRadius: 'var(--radius-md)', border: '1px solid #818cf8', boxShadow: 'var(--shadow-sm)' }}>
+               <label style={{ display: 'block', fontSize: '1rem', fontWeight: 'bold', marginBottom: '0.5rem', color: '#4338ca', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  🚀 LANZAMIENTOS GENERALES
+               </label>
+               <p style={{ fontSize: '0.8rem', color: '#4f46e5', marginBottom: '1rem', marginTop: 0 }}>Anota aquí cualquier lanzamiento o novedad que hayas visto de nuestras marcas en el local.</p>
+               <textarea placeholder="Detalle de nuevos productos o novedades..." rows={3} value={formData.launches} onChange={(e) => setFormData({...formData, launches: e.target.value})} style={{ width: '100%', padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid #a5b4fc', resize: 'vertical' }} />
+               <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  {formData.launchesPhotos.map((p, i) => (
+                     <div key={`gl-${i}`} style={{ position: 'relative', width: '70px', height: '70px' }}>
+                        <img src={p} alt="Lanzamiento" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '6px', border: '1px solid #a5b4fc' }}/>
+                        <button type="button" onClick={() => {
+                           const arr = [...formData.launchesPhotos];
+                           arr.splice(i, 1);
+                           setFormData({...formData, launchesPhotos: arr});
+                        }} style={{ position: 'absolute', top: -5, right: -5, background: '#ef4444', color: 'white', border: 'none', borderRadius: '50%', width: '22px', height: '22px', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>X</button>
+                     </div>
+                  ))}
+                  <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '70px', height: '70px', border: '2px dashed #818cf8', borderRadius: '6px', cursor: 'pointer', background: 'white' }}>
+                     <Plus size={24} color="#818cf8" />
+                     <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={(e) => {
+                        const f = e.target.files[0];
+                        if(f) { const r = new FileReader(); r.onloadend=()=>setFormData({...formData, launchesPhotos: [...formData.launchesPhotos, r.result]}); r.readAsDataURL(f); }
+                        e.target.value = null; // reset input
+                     }}/>
+                  </label>
+               </div>
             </div>
           </div>
         )}

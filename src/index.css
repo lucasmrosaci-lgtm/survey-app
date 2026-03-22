@@ -148,3 +148,125 @@ body {
 .login-btn:active {
   transform: translateY(0);
 }
+
+/* Admin Panel Layout */
+.admin-sidebar {
+  width: 320px;
+  background-color: white;
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  transition: all 0.3s ease;
+  overflow: hidden;
+  white-space: nowrap;
+  position: relative;
+  z-index: 50;
+}
+
+.admin-sidebar.collapsed {
+  width: 0px;
+  border-right: none;
+}
+
+.admin-content-wrapper {
+  flex: 1;
+  background-color: #f1f5f9;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0,0,0,0.5);
+  z-index: 40;
+}
+
+.admin-page-title {
+  font-size: 1.875rem;
+  font-weight: bold;
+  margin: 0;
+  color: var(--text-dark);
+}
+
+.admin-widgets-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.users-grid {
+  display: grid; 
+  grid-template-columns: minmax(300px, 1fr) 2fr;
+  gap: 2rem;
+}
+
+.admin-pad {
+  flex: 1;
+  padding: 2rem;
+  overflow-y: auto;
+}
+
+.admin-header-flex {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+@media (max-width: 768px) {
+  .admin-sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    height: 100%;
+  }
+  .admin-sidebar.collapsed {
+    transform: translateX(-100%);
+    width: 320px; /* retain original width, hide using transform for slide effect */
+  }
+  .admin-sidebar.open {
+    width: 320px;
+    transform: translateX(0);
+    box-shadow: var(--shadow-lg);
+  }
+  
+  .admin-overlay.open {
+    display: block;
+  }
+  
+  .admin-page-title {
+    font-size: 1.25rem;
+  }
+  
+  .admin-widgets-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .users-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .table-responsive table th, 
+  .table-responsive table td {
+    white-space: nowrap;
+  }
+
+  .admin-pad {
+    padding: 1rem;
+  }
+
+  .admin-header-flex {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+}
