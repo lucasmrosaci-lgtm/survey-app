@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { saveSurveyOffline, getStores, getBrands } from '../../services/db';
+import { saveSurveyOffline, getStores, getBrands, getSurveyById, updateSurvey } from '../../services/db';
 import { Camera, MapPin, Save, ArrowLeft, Loader, Store, Filter, Tag, Plus } from 'lucide-react';
 
 export default function SurveyForm() {
@@ -9,12 +9,14 @@ export default function SurveyForm() {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
   const [loading, setLoading] = useState(false);
+  const { id } = useParams();
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [isSynced, setIsSynced] = useState(false);
   const [formData, setFormData] = useState({
     storeId: '',
     storeName: '',
     category: '',
     notes: '',
-    location: null,
     photoPath: null
   });
   
@@ -22,6 +24,7 @@ export default function SurveyForm() {
   const [brandsList, setBrandsList] = useState([]);
   const [brandData, setBrandData] = useState({});
   const [activeBrands, setActiveBrands] = useState([]);
+  const [collapsedBrands, setCollapsedBrands] = useState([]);
   const [activeProducts, setActiveProducts] = useState({});
 
   const [filters, setFilters] = useState({ 
@@ -43,10 +46,36 @@ export default function SurveyForm() {
       loadedBrands.forEach(b => {
          initData[b.name] = { launches: '', launchesPhotos: [] };
       });
-      setBrandData(initData);
+      
+      if (id) {
+         setIsEditMode(true);
+         const survey = await getSurveyById(id);
+         if (survey) {
+            setFormData({
+               storeId: survey.storeId || '',
+               storeName: survey.storeName || '',
+               category: survey.category || '',
+               notes: survey.notes || '',
+               photoPath: survey.photoPath || null
+            });
+            setBrandData(survey.brands || {});
+            const loadedActiveBrands = Object.keys(survey.brands || {});
+            setActiveBrands(loadedActiveBrands);
+            setCollapsedBrands(loadedActiveBrands);
+            
+            const loadedActiveProducts = {};
+            loadedActiveBrands.forEach(b => {
+               loadedActiveProducts[b] = Object.keys(survey.brands[b] || {}).filter(k => k !== 'launches' && k !== 'launchesPhotos' && k !== 'cosecha');
+            });
+            setActiveProducts(loadedActiveProducts);
+            setIsSynced(survey.isSynced);
+         }
+      } else {
+         setBrandData(initData);
+      }
     };
     loadData();
-  }, []);
+  }, [id]);
 
   const getUnique = (field) => {
     return Array.from(new Set(stores.map(s => s[field]).filter(v => v && v !== 'N/A' && v.trim() !== ''))).sort();
@@ -77,26 +106,6 @@ export default function SurveyForm() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleGetLocation = () => {
-    if (!navigator.geolocation) {
-      alert('Tu navegador no soporta geolocalización.');
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setFormData({
-          ...formData,
-          location: {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude
-          }
-        });
-      },
-      (error) => {
-        alert('Error obteniendo ubicación: ' + error.message);
-      }
-    );
-  };
 
   const handlePhotoCapture = (e) => {
     const file = e.target.files[0];
@@ -111,19 +120,20 @@ export default function SurveyForm() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.location) {
-        alert('Por favor captura la ubicación GPS.');
-        return;
-    }
     setLoading(true);
-    await saveSurveyOffline({ 
+    const payload = { 
         ...formData, 
         brands: brandData,
         surveyorId: user?.uid || 'anon',
         surveyorEmail: user?.email || 'anon@anon.com',
         surveyorName: user?.username || 'Anónimo',
         timestamp: new Date().toISOString()
-    });
+    };
+    if (isEditMode) {
+        await updateSurvey(id, payload, isSynced);
+    } else {
+        await saveSurveyOffline(payload);
+    }
     setLoading(false);
     navigate('/');
   };
@@ -214,7 +224,7 @@ export default function SurveyForm() {
         <button type="button" onClick={() => navigate('/')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
           <ArrowLeft size={28} />
         </button>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: 0 }}>Nuevo Relevamiento</h1>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: 0 }}>{isEditMode ? 'Editar Relevamiento' : 'Nuevo Relevamiento'}</h1>
       </div>
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -309,7 +319,10 @@ export default function SurveyForm() {
                   onChange={(e) => {
                      const val = e.target.value;
                      if(val && !activeBrands.includes(val)) {
-                        setActiveBrands([...activeBrands, val]);
+                        // Collapse all previous brands
+                        setCollapsedBrands([...activeBrands]);
+                        // Add new brand at the top
+                        setActiveBrands([val, ...activeBrands]);
                      }
                   }}
                >
@@ -327,10 +340,21 @@ export default function SurveyForm() {
                   return (
                   <div key={brand.name} style={{ background: '#f8fafc', padding: '1.25rem', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0', position: 'relative' }}>
                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                        <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--text-dark)', margin: 0 }}>{brand.name}</h3>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                           <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--text-dark)', margin: 0 }}>{brand.name}</h3>
+                           <button type="button" onClick={() => {
+                              if (collapsedBrands.includes(brand.name)) setCollapsedBrands(collapsedBrands.filter(b => b !== brand.name));
+                              else setCollapsedBrands([...collapsedBrands, brand.name]);
+                           }} style={{ background: '#e2e8f0', border: 'none', color: '#475569', borderRadius: '4px', padding: '0.25rem 0.5rem', fontSize: '0.75rem', cursor: 'pointer', fontWeight: '600' }}>
+                              {collapsedBrands.includes(brand.name) ? 'Desplegar' : 'Agrupar'}
+                           </button>
+                        </div>
                         <button type="button" onClick={() => setActiveBrands(activeBrands.filter(n => n !== brand.name))} style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '0.8rem', cursor: 'pointer', fontWeight: '600', textDecoration: 'underline' }}>Quitar</button>
                      </div>
-                     {brand.products && brand.products.length > 0 ? (
+                     
+                     {!collapsedBrands.includes(brand.name) && (
+                        <>
+                           {brand.products && brand.products.length > 0 ? (
                          <div style={{ marginBottom: '1.5rem', marginTop: '1rem' }}>
                             <select 
                                style={{ width: '100%', padding: '0.6rem', borderRadius: 'var(--radius-md)', border: '1px solid #cbd5e1', backgroundColor: '#f1f5f9', color: 'var(--text-dark)', fontWeight: '500', cursor: 'pointer', fontSize: '0.875rem' }}
@@ -402,8 +426,13 @@ export default function SurveyForm() {
                         ))}
                      </div>
                      
-                     {/* BRAND LEVEL LANZAMIENTOS */}
+                     {/* BRAND LEVEL LANZAMIENTOS Y COSECHA */}
                      <div style={{ marginTop: '1.5rem', background: '#eff6ff', padding: '1.25rem', borderRadius: 'var(--radius-md)', border: '1px solid #bfdbfe' }}>
+                        <div style={{ marginBottom: '1.25rem' }}>
+                           <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--primary-color)' }}>COSECHA</label>
+                           <input type="text" placeholder="Ej. 2023, 2024..." value={brandData[brand.name]?.cosecha || ''} onChange={(e) => updateBrand(brand.name, 'cosecha', e.target.value)} style={{ width: '100%', padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid #bfdbfe' }} />
+                        </div>
+                        
                         <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--primary-color)' }}>LANZAMIENTOS</label>
                         <textarea placeholder="Detalle general de nuevos productos o lanzamientos a nivel marca..." rows={2} value={brandData[brand.name]?.launches || ''} onChange={(e) => updateBrand(brand.name, 'launches', e.target.value)} style={{ width: '100%', padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid #bfdbfe', resize: 'vertical' }} />
                         <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
@@ -423,25 +452,15 @@ export default function SurveyForm() {
                            </label>
                         </div>
                      </div>
+                        </>
+                     )}
                   </div>
                )})}
             </div>
           </div>
         )}
 
-        <div>
-          <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', marginBottom: '0.5rem', color: 'var(--text-dark)' }}>Ubicación GPS *</label>
-          {formData.location ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '1rem', background: '#ecfdf5', color: 'var(--success-color)', borderRadius: 'var(--radius-md)' }}>
-              <MapPin size={20} />
-              <span>Lat: {formData.location.lat.toFixed(4)}, Lng: {formData.location.lng.toFixed(4)}</span>
-            </div>
-          ) : (
-            <button type="button" onClick={handleGetLocation} style={{ width: '100%', padding: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', border: '1px dashed var(--primary-color)', color: 'var(--primary-color)', background: '#eff6ff', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: '500', fontSize: '1rem' }}>
-              <MapPin size={20} /> Capturar Ubicación (Requerido)
-            </button>
-          )}
-        </div>
+
 
         <div>
            <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', marginBottom: '0.5rem', color: 'var(--text-dark)' }}>Fotografía (Opcional)</label>
@@ -480,7 +499,7 @@ export default function SurveyForm() {
 
         <button type="submit" disabled={loading} style={{ position: 'fixed', bottom: '1rem', left: '1rem', right: '1rem', maxWidth: '568px', margin: '0 auto', background: 'var(--primary-color)', color: 'white', padding: '1.25rem', borderRadius: 'var(--radius-lg)', fontSize: '1.125rem', fontWeight: 'bold', border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', boxShadow: 'var(--shadow-lg)' }}>
           {loading ? 'Guardando...' : <Save size={24} />}
-          {loading ? '' : 'Guardar Relevamiento'}
+          {loading ? '' : (isEditMode ? 'Actualizar Relevamiento' : 'Guardar Relevamiento')}
         </button>
       </form>
     </div>

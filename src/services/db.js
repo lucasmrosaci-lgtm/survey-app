@@ -1,12 +1,14 @@
 import localforage from 'localforage';
 import Papa from 'papaparse';
 import { db } from './firebase';
-import { collection, addDoc, getDocs, orderBy, query } from 'firebase/firestore';
+import { collection, addDoc, getDocs, getDoc, orderBy, query, writeBatch, doc, where, updateDoc } from 'firebase/firestore';
 
 localforage.config({
   name: 'SurveyAppPOS',
   storeName: 'surveys'
 });
+
+const chunkArray = (arr, size) => arr.length ? [arr.slice(0, size), ...chunkArray(arr.slice(size), size)] : [];
 
 export const saveSurveyOffline = async (survey) => {
   const id = Date.now().toString();
@@ -23,7 +25,21 @@ export const getPendingSurveys = async () => {
 };
 
 export const getStores = async () => {
-  let stores = await localforage.getItem('stores_list');
+  try {
+    if (navigator.onLine) {
+      const snap = await getDocs(collection(db, 'stores'));
+      if (!snap.empty) {
+        const stores = [];
+        snap.forEach(d => stores.push(d.data()));
+        await localforage.setItem('stores_list_cache', stores);
+        return stores;
+      }
+    }
+  } catch (e) {
+    console.warn("No se pudieron cargar los locales de Firestore. Usando caché local.", e);
+  }
+  
+  let stores = await localforage.getItem('stores_list_cache');
   if (!stores || stores.length === 0) {
     stores = [
       { id: '1', name: 'Kiosco Don Carlos', address: 'Av. San Martín 123', province: 'Buenos Aires', locality: 'La Plata', type: 'Kiosco', cluster: 'Norte' },
@@ -31,7 +47,6 @@ export const getStores = async () => {
       { id: '3', name: 'Farmacia 24H Centro', address: 'Peatonal 789', province: 'Córdoba', locality: 'Capital', type: 'Farmacia', cluster: 'Centro' },
       { id: '4', name: 'Despensa Los Amigos', address: 'Ruta Nacional 9 km 4', province: 'Santa Fe', locality: 'Rosario', type: 'Despensa', cluster: 'Sur' }
     ];
-    await localforage.setItem('stores_list', stores);
   }
   return stores;
 };
@@ -43,15 +58,11 @@ const removeAccents = (str) => {
 
 const findKey = (row, possibleNames) => {
   const keys = Object.keys(row);
-  
-  // 1. Busqueda Exacta prioritaria
   for (const p of possibleNames) {
     const searchStr = removeAccents(p.toLowerCase().trim());
     const exactFound = keys.find(k => removeAccents(k.toLowerCase().trim()) === searchStr);
     if (exactFound) return row[exactFound];
   }
-  
-  // 2. Búsqueda parcial si no encontró exacta
   for (const p of possibleNames) {
     const searchStr = removeAccents(p.toLowerCase().trim());
     const partialFound = keys.find(k => removeAccents(k.toLowerCase().trim()).includes(searchStr));
@@ -67,18 +78,17 @@ export const syncStoresFromCsv = async (url) => {
     const text = await response.text();
     
     if (text.trim().toLowerCase().startsWith('<!doctype html>') || text.includes('<html')) {
-        throw new Error("El enlace pegado es una página web (HTML), no un CSV. Revisa las instrucciones para publicar en Google Sheets como .csv");
+        throw new Error("El enlace pegado es una página web (HTML), no un CSV. Revisa las instrucciones para descargar o publicar en CSV.");
     }
     
     return new Promise((resolve, reject) => {
       Papa.parse(text, {
-        header: true, // Parse headers dynamically based on the first row
+        header: true,
         skipEmptyLines: true,
         complete: async (results) => {
           const newStores = [];
           
           results.data.forEach((row, i) => {
-             // Priorizamos palabras exactas
              const name = findKey(row, ['sucursal', 'nombre', 'punto de venta', 'store', 'pdv', 'cliente']);
              const address = findKey(row, ['direccion', 'dirección', 'domicilio', 'address', 'calle']);
              const province = findKey(row, ['provincia', 'province', 'estado']);
@@ -86,7 +96,6 @@ export const syncStoresFromCsv = async (url) => {
              const type = findKey(row, ['tipo', 'formato', 'canal', 'type', 'categoria', 'categoría']);
              const cluster = findKey(row, ['grupo', 'cluster', 'zona', 'region', 'región']);
 
-             // Si no encuentra por header (ej. archivo sin header), intenta agarrar el primer key como fallback heroico
              const fallbackName = name || row[Object.keys(row)[0]];
 
              if (fallbackName && typeof fallbackName === 'string' && fallbackName.trim()) {
@@ -106,16 +115,38 @@ export const syncStoresFromCsv = async (url) => {
           });
 
           if (newStores.length > 0) {
-            await localforage.setItem('stores_list', newStores);
-            resolve(newStores.length);
+            try {
+              // 1. Clear old collection
+              const oldSnap = await getDocs(collection(db, 'stores'));
+              let delChunks = chunkArray(oldSnap.docs, 450);
+              for (const chunk of delChunks) {
+                const delBatch = writeBatch(db);
+                chunk.forEach(d => delBatch.delete(d.ref));
+                await delBatch.commit();
+              }
+              
+              // 2. Upload new data in chunks
+              const addChunks = chunkArray(newStores, 450);
+              for (const chunk of addChunks) {
+                const addBatch = writeBatch(db);
+                for (const store of chunk) {
+                  const docRef = doc(db, 'stores', store.id);
+                  addBatch.set(docRef, store);
+                }
+                await addBatch.commit();
+              }
+
+              await localforage.setItem('stores_list_cache', newStores);
+              resolve(newStores.length);
+            } catch (err) {
+              console.error("Error batching to firestore:", err);
+              reject(err);
+            }
           } else {
             reject(new Error("No se encontraron datos válidos en el archivo. Verifica los nombres de las columnas."));
           }
         },
-        error: (err) => {
-           console.error("PapaParse error:", err);
-           reject(err);
-        }
+        error: (err) => reject(err)
       });
     });
   } catch(error) {
@@ -125,11 +156,35 @@ export const syncStoresFromCsv = async (url) => {
 };
 
 export const resetStores = async () => {
-  await localforage.removeItem('stores_list');
+  try {
+    const oldSnap = await getDocs(collection(db, 'stores'));
+    let delChunks = chunkArray(oldSnap.docs, 450);
+    for (const chunk of delChunks) {
+      const delBatch = writeBatch(db);
+      chunk.forEach(d => delBatch.delete(d.ref));
+      await delBatch.commit();
+    }
+  } catch (e) {
+    console.error("Error resetting stores:", e);
+  }
+  await localforage.removeItem('stores_list_cache');
 };
 
 export const getBrands = async () => {
-  return (await localforage.getItem('brands_list')) || [];
+  try {
+    if (navigator.onLine) {
+      const snap = await getDocs(collection(db, 'brands'));
+      if (!snap.empty) {
+        const brands = [];
+        snap.forEach(d => brands.push(d.data()));
+        await localforage.setItem('brands_list_cache', brands);
+        return brands;
+      }
+    }
+  } catch(e) {
+    console.warn("No se pudo cargar marcas de Firestore. Usando caché.", e);
+  }
+  return (await localforage.getItem('brands_list_cache')) || [];
 };
 
 export const syncBrandsFromCsv = async (url) => {
@@ -144,7 +199,7 @@ export const syncBrandsFromCsv = async (url) => {
     
     return new Promise((resolve, reject) => {
       Papa.parse(text, {
-        header: false, // Parse by columns index: 0 = Brand, 1 = Product
+        header: false,
         skipEmptyLines: true,
         complete: async (results) => {
           const brandsMap = {};
@@ -154,7 +209,6 @@ export const syncBrandsFromCsv = async (url) => {
              const productName = row[1];
              if (brandName && typeof brandName === 'string' && brandName.trim()) {
                  const name = brandName.trim();
-                 // Skip header if obvious
                  if (name.toLowerCase() === 'marca' || name.toLowerCase() === 'marcas') return;
                  
                  if (!brandsMap[name]) {
@@ -168,8 +222,33 @@ export const syncBrandsFromCsv = async (url) => {
 
           const brandsArray = Object.values(brandsMap);
           if (brandsArray.length > 0) {
-            await localforage.setItem('brands_list', brandsArray);
-            resolve(brandsArray.length);
+            try {
+              // 1. Clear old
+              const oldSnap = await getDocs(collection(db, 'brands'));
+              let delChunks = chunkArray(oldSnap.docs, 450);
+              for (const chunk of delChunks) {
+                const delBatch = writeBatch(db);
+                chunk.forEach(d => delBatch.delete(d.ref));
+                await delBatch.commit();
+              }
+              
+              // 2. Upload new
+              const addChunks = chunkArray(brandsArray, 450);
+              for (const chunk of addChunks) {
+                const addBatch = writeBatch(db);
+                for (const brand of chunk) {
+                  const safeId = brand.name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() + '_' + Date.now();
+                  const docRef = doc(db, 'brands', safeId);
+                  addBatch.set(docRef, brand);
+                }
+                await addBatch.commit();
+              }
+
+              await localforage.setItem('brands_list_cache', brandsArray);
+              resolve(brandsArray.length);
+            } catch (e) {
+              reject(e);
+            }
           } else {
             reject(new Error("No se encontraron marcas válidas en el archivo."));
           }
@@ -202,21 +281,57 @@ export const markSurveySynced = async (id) => {
   
   if (surveyToSync) {
     try {
-        // Remove local id as Firestore generates its own document ID
         const { id: localId, ...surveyData } = surveyToSync; 
         
-        // Upload to Firestore
         await addDoc(collection(db, 'surveys'), {
             ...surveyData,
             status: 'synced'
         });
         
-        // Remove from pending locally
         const updatedPending = pending.filter(s => s.id !== id);
         await localforage.setItem('pending_surveys', updatedPending);
     } catch(e) {
         console.error("Error uploading survey", e);
         throw e;
     }
+  }
+};
+
+export const getWorkerSurveys = async (username) => {
+  try {
+     const q = query(collection(db, 'surveys'), where('surveyorName', '==', username));
+     const snap = await getDocs(q);
+     const list = [];
+     snap.forEach(document => list.push({ id: document.id, ...document.data() }));
+     return list.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
+  } catch(e) {
+     console.error("Error fetching worker surveys", e);
+     return [];
+  }
+};
+
+export const getSurveyById = async (id) => {
+  const pending = await getPendingSurveys();
+  const pFound = pending.find(s => s.id === id);
+  if (pFound) return { ...pFound, isSynced: false };
+
+  try {
+     const docSnap = await getDoc(doc(db, 'surveys', id));
+     if (docSnap.exists()) {
+        return { id: docSnap.id, ...docSnap.data(), isSynced: true };
+     }
+  } catch(e) {
+     console.error("Error fetching single survey", e);
+  }
+  return null;
+};
+
+export const updateSurvey = async (id, data, isSynced) => {
+  if (isSynced) {
+     await updateDoc(doc(db, 'surveys', id), data);
+  } else {
+     const pending = await getPendingSurveys();
+     const updated = pending.map(s => s.id === id ? { ...s, ...data } : s);
+     await localforage.setItem('pending_surveys', updated);
   }
 };

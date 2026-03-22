@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { getSyncedSurveys, syncStoresFromCsv, resetStores, syncBrandsFromCsv } from '../../services/db';
-import { LogOut, Download, Map as MapIcon, Image as ImageIcon, RefreshCw, Link as LinkIcon, Trash2, Tag, Users, ClipboardList, Activity } from 'lucide-react';
+import { getSyncedSurveys } from '../../services/db';
+import { LogOut, Download, Map as MapIcon, Image as ImageIcon, Users, ClipboardList, Activity } from 'lucide-react';
 import UsersManagement from './UsersManagement';
 
 export default function AdminDashboard() {
@@ -20,11 +20,6 @@ export default function AdminDashboard() {
     return Object.entries(summary).sort((a,b) => b[1] - a[1]);
   }, [surveys]);
   
-  // CSV Sync State
-  const [csvUrl, setCsvUrl] = useState(localStorage.getItem('survey_csv_url') || '');
-  const [brandsCsvUrl, setBrandsCsvUrl] = useState(localStorage.getItem('brands_csv_url') || '');
-  const [syncing, setSyncing] = useState(false);
-  const [syncingBrands, setSyncingBrands] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -36,46 +31,6 @@ export default function AdminDashboard() {
     setSurveys(data);
   };
 
-  const handleSyncCsv = async () => {
-    if(!csvUrl || !csvUrl.startsWith('http')) {
-      alert("Por favor inserta una URL válida que comience con http:// o https://");
-      return;
-    }
-    setSyncing(true);
-    try {
-      localStorage.setItem('survey_csv_url', csvUrl);
-      const importedCount = await syncStoresFromCsv(csvUrl);
-      alert(`¡Éxito! Se importaron/actualizaron ${importedCount} puntos de venta desde tu enlace.`);
-    } catch(err) {
-      alert(err.message || "Error al sincronizar. Verifica la URL.");
-    }
-    setSyncing(false);
-  };
-
-  const handleSyncBrandsCsv = async () => {
-    if(!brandsCsvUrl || !brandsCsvUrl.startsWith('http')) {
-      alert("Por favor inserta una URL válida que comience con http:// o https://");
-      return;
-    }
-    setSyncingBrands(true);
-    try {
-      localStorage.setItem('brands_csv_url', brandsCsvUrl);
-      const importedCount = await syncBrandsFromCsv(brandsCsvUrl);
-      alert(`¡Éxito! Se sincronizaron las variables de ${importedCount} marcas distintas.`);
-    } catch(err) {
-      alert(err.message || "Error al sincronizar Marcas. Verifica la URL.");
-    }
-    setSyncingBrands(false);
-  };
-
-  const handleReset = async () => {
-    if(window.confirm("¿Seguro que deseas limpiar la lista corrupta y restaurar los puntos de prueba originales?")) {
-      await resetStores();
-      setCsvUrl('');
-      localStorage.removeItem('survey_csv_url');
-      alert("Lista restaurada con éxito. Ve al formulario de relevamiento para ver los cambios.");
-    }
-  };
 
   const exportCSV = () => {
     if (surveys.length === 0) {
@@ -123,50 +78,10 @@ export default function AdminDashboard() {
              <ClipboardList size={18} /> Relevamientos
            </button>
            <button onClick={() => setActiveTab('users')} style={{ width: '100%', padding: '0.75rem', textAlign: 'left', background: activeTab === 'users' ? '#eff6ff' : 'transparent', color: activeTab === 'users' ? 'var(--primary-color)' : 'var(--text-dark)', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: activeTab === 'users' ? 'bold' : 'normal', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-             <Users size={18} /> Usuarios Relevadores
+             <Users size={18} /> Gestión de Usuarios
            </button>
         </div>
 
-        {/* Sync Stores Section */}
-        <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-color)' }}>
-          <h3 style={{ fontSize: '0.875rem', fontWeight: '600', color: 'var(--text-dark)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <LinkIcon size={16} /> Importar Locales (CSV URL)
-          </h3>
-          <input 
-            type="url" 
-            value={csvUrl}
-            onChange={(e) => setCsvUrl(e.target.value)}
-            placeholder="https://docs.google.com/spreadsheets/.../export?format=csv"
-            style={{ width: '100%', padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', marginBottom: '1rem', fontSize: '0.875rem' }}
-          />
-          <button onClick={handleSyncCsv} disabled={syncing} style={{ width: '100%', padding: '0.75rem', background: 'var(--primary-color)', color: 'white', borderRadius: 'var(--radius-md)', border: 'none', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', transition: 'all 0.2s', marginBottom: '0.5rem' }}>
-            {syncing ? <RefreshCw size={16} className="animate-spin" /> : <RefreshCw size={16} />} 
-            {syncing ? 'Sincronizando...' : 'Sincronizar Locales'}
-          </button>
-          
-          <button onClick={handleReset} style={{ width: '100%', padding: '0.5rem', background: 'none', color: 'var(--text-light)', border: '1px dashed var(--border-color)', borderRadius: 'var(--radius-md)', fontSize: '0.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-            <Trash2 size={14} /> Restaurar locales por defecto
-          </button>
-        </div>
-
-        {/* Sync Brands Section */}
-        <div style={{ padding: '1.5rem', flex: 1, overflowY: 'auto' }}>
-          <h3 style={{ fontSize: '0.875rem', fontWeight: '600', color: 'var(--text-dark)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Tag size={16} /> Importar Marcas (CSV URL)
-          </h3>
-          <p style={{ fontSize: '0.75rem', color: 'var(--text-light)', marginBottom: '1rem' }}>CSV: Col A = Marca, Col B = Producto</p>
-          <input 
-            type="url" 
-            value={brandsCsvUrl}
-            onChange={(e) => setBrandsCsvUrl(e.target.value)}
-            placeholder="URL del Excel de Marcas..."
-            style={{ width: '100%', padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', marginBottom: '1rem', fontSize: '0.875rem' }}
-          />
-          <button onClick={handleSyncBrandsCsv} disabled={syncingBrands} style={{ width: '100%', padding: '0.75rem', background: '#475569', color: 'white', borderRadius: 'var(--radius-md)', border: 'none', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', transition: 'all 0.2s' }}>
-            {syncingBrands ? <RefreshCw size={16} className="animate-spin" /> : <RefreshCw size={16} />} 
-            {syncingBrands ? 'Sincronizando...' : 'Sincronizar Marcas'}
-          </button>
-        </div>
 
         <div style={{ padding: '1rem', borderTop: '1px solid var(--border-color)', marginTop: 'auto' }}>
           <div style={{ marginBottom: '1rem', fontWeight: '500', color: 'var(--text-dark)' }}>Admin: {user?.username}</div>

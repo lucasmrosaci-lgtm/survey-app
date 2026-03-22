@@ -49,6 +49,14 @@ function AppRoutes() {
         } 
       />
       <Route 
+        path="/survey/edit/:id" 
+        element={
+          <ProtectedRoute allowedRoles={['worker']}>
+            <SurveyForm />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
         path="/admin/*" 
         element={
           <ProtectedRoute allowedRoles={['admin']}>

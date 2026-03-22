@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { db, secondaryAuth } from '../../services/firebase';
-import { collection, getDocs, setDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, setDoc, doc, deleteDoc } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, signOut } from 'firebase/auth';
-import { UserPlus, Users, Loader } from 'lucide-react';
+import { UserPlus, Users, Loader, Trash2 } from 'lucide-react';
 
 export default function UsersManagement() {
   const [usersList, setUsersList] = useState([]);
@@ -11,6 +11,7 @@ export default function UsersManagement() {
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newName, setNewName] = useState('');
+  const [newRole, setNewRole] = useState('worker');
   const [isCreating, setIsCreating] = useState(false);
   const [message, setMessage] = useState(null);
 
@@ -47,12 +48,12 @@ export default function UsersManagement() {
       await setDoc(doc(db, 'users', uid), {
          email: newEmail,
          name: newName || newEmail.split('@')[0],
-         role: 'worker',
+         role: newRole,
          createdAt: new Date().toISOString()
       });
       
-      setMessage({ type: 'success', text: 'Usuario relevador creado exitosamente.' });
-      setNewEmail(''); setNewPassword(''); setNewName('');
+      setMessage({ type: 'success', text: 'Usuario creado exitosamente.' });
+      setNewEmail(''); setNewPassword(''); setNewName(''); setNewRole('worker');
       fetchUsers(); // Refresh list
     } catch (err) {
       console.error(err);
@@ -61,10 +62,23 @@ export default function UsersManagement() {
     setIsCreating(false);
   };
 
+  const handleDeleteUser = async (id, name) => {
+    if (window.confirm(`¿Estás seguro de que deseas eliminar a ${name}?`)) {
+      try {
+        await deleteDoc(doc(db, 'users', id));
+        setMessage({ type: 'success', text: `Usuario ${name} eliminado del directorio.` });
+        fetchUsers();
+      } catch (err) {
+        console.error(err);
+        setMessage({ type: 'error', text: 'Error eliminando: ' + err.message });
+      }
+    }
+  };
+
   return (
     <div style={{ padding: '2rem' }}>
       <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '2rem' }}>
-        <Users color="var(--primary-color)" /> Gestión de Usuarios Relevadores
+        <Users color="var(--primary-color)" /> Gestión de Usuarios
       </h2>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 1fr) 2fr', gap: '2rem' }}>
@@ -72,7 +86,7 @@ export default function UsersManagement() {
         {/* CREATE USER FORM */}
         <div style={{ background: 'white', padding: '1.5rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-color)', height: 'fit-content' }}>
            <h3 style={{ fontSize: '1.1rem', fontWeight: '600', marginBottom: '1.5rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-             <UserPlus size={18} /> Crear Nuevo Relevador
+             <UserPlus size={18} /> Crear Nuevo Usuario
            </h3>
 
            {message && (
@@ -93,6 +107,13 @@ export default function UsersManagement() {
               <div>
                 <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: '0.5rem' }}>Contraseña *</label>
                 <input type="password" value={newPassword} onChange={e=>setNewPassword(e.target.value)} required minLength={6} placeholder="Mínimo 6 caracteres" style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #cbd5e1' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: '0.5rem' }}>Rol del Usuario *</label>
+                <select value={newRole} onChange={e=>setNewRole(e.target.value)} style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: '#fff' }}>
+                  <option value="worker">Relevador (Worker)</option>
+                  <option value="admin">Administrador (Admin)</option>
+                </select>
               </div>
               
               <button type="submit" disabled={isCreating} style={{ marginTop: '0.5rem', background: 'var(--primary-color)', color: 'white', padding: '0.5rem', borderRadius: '4px', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>
@@ -118,11 +139,12 @@ export default function UsersManagement() {
                          <th style={{ padding: '0.75rem 0.5rem' }}>Correo Electrónico</th>
                          <th style={{ padding: '0.75rem 0.5rem' }}>Rol</th>
                          <th style={{ padding: '0.75rem 0.5rem' }}>Fecha Registro</th>
+                         <th style={{ padding: '0.75rem 0.5rem', width: '40px' }}></th>
                       </tr>
                    </thead>
                    <tbody>
                       {usersList.length === 0 ? (
-                         <tr><td colSpan={4} style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-light)' }}>Aún no hay usuarios relevadores generados.</td></tr>
+                         <tr><td colSpan={4} style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-light)' }}>Aún no hay usuarios generados.</td></tr>
                       ) : (
                          usersList.map(u => (
                             <tr key={u.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
@@ -130,6 +152,11 @@ export default function UsersManagement() {
                                <td style={{ padding: '0.75rem 0.5rem', color: 'var(--primary-color)' }}>{u.email}</td>
                                <td style={{ padding: '0.75rem 0.5rem' }}><span style={{ backgroundColor: u.role === 'admin' ? '#fef3c7' : '#e0e7ff', color: u.role === 'admin' ? '#d97706' : '#4338ca', padding: '0.25rem 0.5rem', borderRadius: '999px', fontSize: '0.75rem' }}>{u.role}</span></td>
                                <td style={{ padding: '0.75rem 0.5rem', color: 'var(--text-light)', fontSize: '0.8rem' }}>{new Date(u.createdAt).toLocaleDateString()}</td>
+                               <td style={{ padding: '0.75rem 0.5rem', textAlign: 'center' }}>
+                                  <button onClick={() => handleDeleteUser(u.id, u.name || u.email)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center' }} title="Eliminar del directorio">
+                                     <Trash2 size={16} />
+                                  </button>
+                               </td>
                             </tr>
                          ))
                       )}
